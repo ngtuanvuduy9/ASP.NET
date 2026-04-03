@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using nguyentuanvuduy_2123110226.Data;
 using nguyentuanvuduy_2123110226.DTOs;
@@ -56,7 +57,8 @@ namespace nguyentuanvuduy_2123110226.Controllers
             return Ok(category);
         }
 
-        // POST: api/Category
+        // POST: api/Category — ✅ KHÓA: Chỉ Admin
+        [Authorize(Roles = "admin")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CategoryCreateDto dto)
         {
@@ -68,7 +70,7 @@ namespace nguyentuanvuduy_2123110226.Controllers
 
             var category = new Category
             {
-                CategoryCode = dto.CategoryCode.Trim().ToUpper(), // ✅ Chuẩn hóa luôn
+                CategoryCode = dto.CategoryCode.Trim().ToUpper(),
                 Name = dto.Name.Trim(),
                 Description = dto.Description?.Trim(),
                 IsActive = true,
@@ -82,7 +84,8 @@ namespace nguyentuanvuduy_2123110226.Controllers
             return CreatedAtAction(nameof(GetById), new { id = category.Id }, result);
         }
 
-        // POST: api/Category/bulk
+        // POST: api/Category/bulk — ✅ KHÓA: Chỉ Admin
+        [Authorize(Roles = "admin")]
         [HttpPost("bulk")]
         public async Task<IActionResult> BulkCreate([FromBody] List<CategoryCreateDto> dtos)
         {
@@ -119,7 +122,8 @@ namespace nguyentuanvuduy_2123110226.Controllers
             });
         }
 
-        // PUT: api/Category/5  — CHỈ cho sửa Name & Description, CategoryCode bất biến
+        // PUT: api/Category/5 — ✅ KHÓA: Chỉ Admin
+        [Authorize(Roles = "admin")]
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] CategoryUpdateDto dto)
         {
@@ -136,10 +140,11 @@ namespace nguyentuanvuduy_2123110226.Controllers
             category.Description = dto.Description?.Trim();
 
             await _context.SaveChangesAsync();
-            return NoContent(); // 204
+            return NoContent();
         }
 
-        // DELETE: api/Category/5  — Soft delete
+        // DELETE: api/Category/5 — ✅ KHÓA: Chỉ Admin
+        [Authorize(Roles = "admin")]
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
@@ -149,7 +154,7 @@ namespace nguyentuanvuduy_2123110226.Controllers
             if (category == null)
                 return NotFound(new { message = $"Không tìm thấy category với Id = {id}" });
 
-            // ✅ Kiểm tra còn Product đang dùng không
+            // Kiểm tra còn Product đang dùng không
             bool hasProducts = await _context.Products
                 .AnyAsync(p => p.CategoryId == id);
 
@@ -159,7 +164,7 @@ namespace nguyentuanvuduy_2123110226.Controllers
             category.IsActive = false;
             await _context.SaveChangesAsync();
 
-            return NoContent(); // 204
+            return NoContent();
         }
     }
 }

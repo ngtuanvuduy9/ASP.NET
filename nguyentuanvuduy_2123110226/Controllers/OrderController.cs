@@ -1,4 +1,4 @@
-﻿// Controllers/OrderController.cs
+﻿using Microsoft.AspNetCore.Authorization; // ✅ Thêm thư viện Auth
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using nguyentuanvuduy_2123110226.Data;
@@ -19,6 +19,8 @@ namespace nguyentuanvuduy_2123110226.Controllers
         }
 
         // GET: api/Order?page=1&size=10&status=pending
+        // 🔒 KHÓA: Chỉ Admin mới được xem toàn bộ danh sách đơn hàng
+        [Authorize(Roles = "admin")]
         [HttpGet]
         public async Task<IActionResult> GetAll(
             [FromQuery] int page = 1,
@@ -62,6 +64,8 @@ namespace nguyentuanvuduy_2123110226.Controllers
         }
 
         // GET: api/Order/5
+        // 🔒 KHÓA: Chỉ Admin mới được xem chi tiết theo Id (Khách sẽ dùng Track)
+        [Authorize(Roles = "admin")]
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
@@ -102,6 +106,7 @@ namespace nguyentuanvuduy_2123110226.Controllers
         }
 
         // GET: api/Order/track/ORD-20260327-0001
+        // ✅ MỞ CỬA: Khách hàng dùng mã đơn hàng để tự tra cứu
         [HttpGet("track/{orderCode}")]
         public async Task<IActionResult> Track(string orderCode)
         {
@@ -134,55 +139,70 @@ namespace nguyentuanvuduy_2123110226.Controllers
         }
 
         // POST: api/Order  — Đặt hàng
+        // ✅ MỞ CỬA: Ai cũng có thể đặt hàng
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] OrderCreateDto dto)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            // Validate payment method
             var validPayments = new[] { "cod", "bank_transfer" };
             if (!validPayments.Contains(dto.PaymentMethod))
                 return BadRequest(new { message = "PaymentMethod chỉ chấp nhận: cod, bank_transfer" });
 
-            // Lấy tất cả product cần thiết 1 lần — tránh N+1
             var productIds = dto.Items.Select(i => i.ProductId).ToList();
             var products = await _context.Products
                 .Where(p => productIds.Contains(p.Id) && p.IsActive)
                 .ToListAsync();
 
-            // Kiểm tra product tồn tại
             var missingIds = productIds.Except(products.Select(p => p.Id)).ToList();
             if (missingIds.Any())
                 return NotFound(new { message = $"Sản phẩm không tồn tại: {string.Join(", ", missingIds)}" });
 
-            // Kiểm tra tồn kho
-            var outOfStock = products
-                .Where(p => p.Status == "out_of_stock")
-                .Select(p => p.Name)
-                .ToList();
-            if (outOfStock.Any())
-                return Conflict(new { message = $"Sản phẩm hết hàng: {string.Join(", ", outOfStock)}" });
-
-            // Tạo OrderDetails + tính tiền
-            var details = dto.Items.Select(item =>
+            // ✅ LÔ-GIC TỒN KHO MỚI (10/10)
+            var insufficientStock = new List<string>();
+            foreach (var item in dto.Items)
             {
                 var product = products.First(p => p.Id == item.ProductId);
-                return new OrderDetail
+                if (product.StockQuantity < item.Quantity)
+                {
+                    insufficientStock.Add($"{product.Name} (Còn: {product.StockQuantity}, Đặt: {item.Quantity})");
+                }
+            }
+
+            if (insufficientStock.Any())
+                return Conflict(new { message = $"Sản phẩm không đủ số lượng: {string.Join("; ", insufficientStock)}" });
+
+            var details = new List<OrderDetail>();
+
+            // ✅ TRỪ TỒN KHO VÀ TẠO DETAIL
+            foreach (var item in dto.Items)
+            {
+                var product = products.First(p => p.Id == item.ProductId);
+
+                // Trừ số lượng kho
+                product.StockQuantity -= item.Quantity;
+
+                // Cập nhật trạng thái nếu hết hàng
+                if (product.StockQuantity == 0)
+                {
+                    product.Status = "out_of_stock";
+                }
+
+                details.Add(new OrderDetail
                 {
                     ProductId = product.Id,
-                    ProductName = product.Name,  // ✅ Snapshot
-                    UnitPrice = product.Price, // ✅ Snapshot
+                    ProductName = product.Name,
+                    UnitPrice = product.Price,
                     Quantity = item.Quantity,
                     SubTotal = product.Price * item.Quantity
-                };
-            }).ToList();
+                });
+            }
 
             var subTotal = details.Sum(d => d.SubTotal);
-            var shippingFee = 30000m;
+            var shippingFee = 30000m; // Có thể làm linh hoạt sau
             var totalAmount = subTotal + shippingFee;
 
-            // Tạo OrderCode duy nhất
             var orderCode = $"ORD-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..4].ToUpper()}";
 
             var order = new Order
@@ -208,6 +228,8 @@ namespace nguyentuanvuduy_2123110226.Controllers
             };
 
             _context.Orders.Add(order);
+
+            // ✅ SaveChangesAsync sẽ tự động lưu Order, OrderDetails và thay đổi Tồn kho của Products trong cùng 1 Transaction
             await _context.SaveChangesAsync();
 
             return CreatedAtAction(nameof(GetById), new { id = order.Id }, new
@@ -220,7 +242,9 @@ namespace nguyentuanvuduy_2123110226.Controllers
             });
         }
 
-        // PATCH: api/Order/5/status  — Cập nhật trạng thái (admin)
+        // PATCH: api/Order/5/status  — Cập nhật trạng thái
+        // 🔒 KHÓA: Chỉ Admin
+        [Authorize(Roles = "admin")]
         [HttpPatch("{id:int}/status")]
         public async Task<IActionResult> UpdateStatus(int id, [FromBody] OrderStatusUpdateDto dto)
         {
@@ -229,19 +253,36 @@ namespace nguyentuanvuduy_2123110226.Controllers
                 return BadRequest(new { message = $"Status không hợp lệ. Chỉ chấp nhận: {string.Join(", ", validStatuses)}" });
 
             var order = await _context.Orders
+                .Include(o => o.OrderDetails) // Lấy Detail để hoàn tồn kho nếu huỷ
                 .FirstOrDefaultAsync(o => o.Id == id && o.IsActive);
 
             if (order == null)
                 return NotFound(new { message = $"Không tìm thấy đơn hàng với Id = {id}" });
 
-            // Không cho phép cập nhật đơn đã huỷ hoặc đã giao
             if (order.Status is "delivered" or "cancelled")
                 return Conflict(new { message = $"Không thể cập nhật đơn hàng đã '{order.Status}'" });
+
+            // ✅ NẾU ADMIN HUỶ ĐƠN -> HOÀN LẠI TỒN KHO
+            if (dto.Status == "cancelled")
+            {
+                var productIds = order.OrderDetails.Select(d => d.ProductId).ToList();
+                var products = await _context.Products.Where(p => productIds.Contains(p.Id)).ToListAsync();
+
+                foreach (var detail in order.OrderDetails)
+                {
+                    var product = products.FirstOrDefault(p => p.Id == detail.ProductId);
+                    if (product != null)
+                    {
+                        product.StockQuantity += detail.Quantity;
+                        if (product.StockQuantity > 0 && product.Status == "out_of_stock")
+                            product.Status = "in_stock";
+                    }
+                }
+            }
 
             order.Status = dto.Status;
             order.UpdatedAt = DateTime.UtcNow;
 
-            // ✅ Nếu delivered thì tự động set paid
             if (dto.Status == "delivered")
                 order.PaymentStatus = "paid";
 
@@ -249,7 +290,9 @@ namespace nguyentuanvuduy_2123110226.Controllers
             return NoContent();
         }
 
-        // DELETE: api/Order/5  — Soft delete (admin huỷ đơn)
+        // DELETE: api/Order/5  — Soft delete (admin huỷ đơn vĩnh viễn)
+        // 🔒 KHÓA: Chỉ Admin
+        [Authorize(Roles = "admin")]
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
