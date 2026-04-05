@@ -1,4 +1,5 @@
-﻿using nguyentuanvuduy_2123110226.DTOs;
+﻿using Microsoft.AspNetCore.Http; // Bổ sung
+using nguyentuanvuduy_2123110226.DTOs;
 
 namespace nguyentuanvuduy_2123110226.Services
 {
@@ -9,5 +10,8 @@ namespace nguyentuanvuduy_2123110226.Services
         Task<(bool IsSuccess, int StatusCode, string Message, BlogReadDto? Data)> CreateAsync(BlogCreateDto dto);
         Task<(bool IsSuccess, int StatusCode, string Message)> UpdateAsync(int id, BlogUpdateDto dto);
         Task<(bool IsSuccess, int StatusCode, string Message)> DeleteAsync(int id);
+
+        // ✅ THÊM HÀM UPLOAD ẢNH CHO BLOG
+        Task<(bool IsSuccess, string Message, string? FileUrl)> UploadImageAsync(IFormFile file);
     }
 }

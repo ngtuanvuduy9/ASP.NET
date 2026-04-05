@@ -2,6 +2,8 @@
 using nguyentuanvuduy_2123110226.Data;
 using nguyentuanvuduy_2123110226.DTOs;
 using nguyentuanvuduy_2123110226.Models;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Hosting;
 
 namespace nguyentuanvuduy_2123110226.Services
 {
@@ -9,9 +11,14 @@ namespace nguyentuanvuduy_2123110226.Services
     {
         private readonly AppDbContext _context;
 
-        public ProductService(AppDbContext context)
+        // ✅ Đã thêm khai báo biến _environment ở đây
+        private readonly IWebHostEnvironment _environment;
+
+        // ✅ Đã tiêm IWebHostEnvironment vào Constructor
+        public ProductService(AppDbContext context, IWebHostEnvironment environment)
         {
             _context = context;
+            _environment = environment;
         }
 
         public async Task<(int Total, IEnumerable<ProductReadDto> Data)> GetAllAsync(int page, int size, int? categoryId)
@@ -81,7 +88,6 @@ namespace nguyentuanvuduy_2123110226.Services
             _context.Products.Add(product);
             await _context.SaveChangesAsync();
 
-            // Để trả về DTO đúng chuẩn, cần gọi thêm tên Category (trong thực tế có thể load navigation property, ở đây mình giả lập nhanh bằng DTO)
             var categoryName = await _context.Categories.Where(c => c.Id == dto.CategoryId).Select(c => c.Name).FirstOrDefaultAsync() ?? "";
 
             var readDto = new ProductReadDto(
@@ -150,6 +156,23 @@ namespace nguyentuanvuduy_2123110226.Services
             if (!categoryExists)
                 return (false, 404, $"Không tìm thấy category với Id = {dto.CategoryId}");
 
+            // ✅ THÊM LOGIC XÓA FILE ẢNH CŨ NẾU CÓ ẢNH MỚI
+            if (!string.IsNullOrEmpty(dto.ImageUrl) && dto.ImageUrl != product.ImageUrl)
+            {
+                // Nếu sản phẩm đã từng có ảnh cũ, tiến hành xóa nó
+                if (!string.IsNullOrEmpty(product.ImageUrl))
+                {
+                    // Lấy đường dẫn tuyệt đối của file cũ trên ổ cứng. 
+                    // TrimStart('/') để cắt dấu gạch chéo đầu tiên của "/uploads/products/..."
+                    var oldFilePath = Path.Combine(_environment.WebRootPath, product.ImageUrl.TrimStart('/'));
+
+                    if (System.IO.File.Exists(oldFilePath))
+                    {
+                        System.IO.File.Delete(oldFilePath); // Xóa file
+                    }
+                }
+            }
+
             product.Name = dto.Name.Trim();
             product.Description = dto.Description?.Trim();
             product.Price = dto.Price;
@@ -157,7 +180,7 @@ namespace nguyentuanvuduy_2123110226.Services
             product.Weight = dto.Weight?.Trim();
             product.Size = dto.Size?.Trim();
             product.StockQuantity = dto.StockQuantity;
-            product.ImageUrl = dto.ImageUrl?.Trim();
+            product.ImageUrl = dto.ImageUrl?.Trim(); // Cập nhật link mới vào DB
             product.Status = dto.StockQuantity > 0 ? "in_stock" : "out_of_stock";
             product.CategoryId = dto.CategoryId;
             product.UpdatedAt = DateTime.UtcNow;
@@ -165,7 +188,6 @@ namespace nguyentuanvuduy_2123110226.Services
             await _context.SaveChangesAsync();
             return (true, 204, "Cập nhật thành công");
         }
-
         public async Task<(bool IsSuccess, int StatusCode, string Message)> DeleteAsync(int id)
         {
             var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id && p.IsActive);
@@ -178,6 +200,44 @@ namespace nguyentuanvuduy_2123110226.Services
 
             await _context.SaveChangesAsync();
             return (true, 204, "Xóa thành công");
+        }
+
+        // ✅ HÀM XỬ LÝ LƯU FILE XUỐNG Ổ CỨNG
+        public async Task<(bool IsSuccess, string Message, string? FileUrl)> UploadImageAsync(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                return (false, "Không có file nào được chọn.", null);
+
+            // Kiểm tra định dạng ảnh (chỉ cho phép jpg, png, jpeg, gif)
+            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif" };
+            var extension = Path.GetExtension(file.FileName).ToLower();
+            if (!allowedExtensions.Contains(extension))
+                return (false, "Chỉ cho phép tải lên file ảnh (.jpg, .jpeg, .png, .gif)", null);
+
+            // Kiểm tra dung lượng (VD: giới hạn 5MB)
+            if (file.Length > 5 * 1024 * 1024)
+                return (false, "Kích thước ảnh không được vượt quá 5MB", null);
+
+            // Tạo thư mục wwwroot/uploads/products nếu chưa có
+            var uploadPath = Path.Combine(_environment.WebRootPath, "uploads", "products");
+            if (!Directory.Exists(uploadPath))
+            {
+                Directory.CreateDirectory(uploadPath);
+            }
+
+            // Đổi tên file để tránh trùng lặp (Dùng Guid)
+            var fileName = $"{Guid.NewGuid()}{extension}";
+            var filePath = Path.Combine(uploadPath, fileName);
+
+            // Copy file vào thư mục
+            using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            // Trả về đường dẫn tương đối để lưu vào DB (ImageUrl)
+            var fileUrl = $"/uploads/products/{fileName}";
+            return (true, "Tải ảnh thành công", fileUrl);
         }
     }
 }

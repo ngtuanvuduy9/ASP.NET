@@ -1,4 +1,5 @@
-﻿using nguyentuanvuduy_2123110226.DTOs;
+﻿using Microsoft.AspNetCore.Http; // Thêm thư viện này để dùng IFormFile
+using nguyentuanvuduy_2123110226.DTOs;
 
 namespace nguyentuanvuduy_2123110226.Services
 {
@@ -10,5 +11,8 @@ namespace nguyentuanvuduy_2123110226.Services
         Task<(bool IsSuccess, int StatusCode, string Message, int Added, int Skipped)> BulkCreateAsync(List<ProductCreateDto> dtos);
         Task<(bool IsSuccess, int StatusCode, string Message)> UpdateAsync(int id, ProductUpdateDto dto);
         Task<(bool IsSuccess, int StatusCode, string Message)> DeleteAsync(int id);
+
+        // ✅ THÊM HÀM UPLOAD ẢNH
+        Task<(bool IsSuccess, string Message, string? FileUrl)> UploadImageAsync(IFormFile file);
     }
 }

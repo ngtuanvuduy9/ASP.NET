@@ -102,7 +102,7 @@ app.UseCors("AllowReactApp");
 // BƯỚC 3: Kích hoạt Middleware (Lưu ý: Authentication TRƯỚC Authorization)
 app.UseAuthentication();
 app.UseAuthorization();
-
+app.UseStaticFiles(); // Cho phép trình duyệt truy cập thẳng vào thư mục wwwroot
 app.MapControllers();
 
 app.Run();

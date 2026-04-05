@@ -110,5 +110,18 @@ namespace nguyentuanvuduy_2123110226.Controllers
 
             return NoContent();
         }
+        // POST: api/Product/upload-image
+        // [Authorize(Roles = "admin")]
+        [HttpPost("upload-image")]
+        public async Task<IActionResult> UploadImage(IFormFile file)
+        {
+            var result = await _productService.UploadImageAsync(file);
+
+            if (!result.IsSuccess)
+                return BadRequest(new { message = result.Message });
+
+            // Trả về cái link để Frontend gán vào biến ImageUrl
+            return Ok(new { url = result.FileUrl });
+        }
     }
 }

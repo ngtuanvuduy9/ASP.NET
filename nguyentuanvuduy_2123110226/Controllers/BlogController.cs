@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http; // Bổ sung
 using Microsoft.AspNetCore.Mvc;
 using nguyentuanvuduy_2123110226.DTOs;
 using nguyentuanvuduy_2123110226.Services;
@@ -67,6 +68,19 @@ namespace nguyentuanvuduy_2123110226.Controllers
             if (!result.IsSuccess) return NotFound(new { message = result.Message });
 
             return NoContent();
+        }
+
+        // ✅ API UPLOAD ẢNH CHO BLOG
+        [Authorize(Roles = "admin")]
+        [HttpPost("upload-image")]
+        public async Task<IActionResult> UploadImage(IFormFile file)
+        {
+            var result = await _blogService.UploadImageAsync(file);
+
+            if (!result.IsSuccess)
+                return BadRequest(new { message = result.Message });
+
+            return Ok(new { url = result.FileUrl });
         }
     }
 }
