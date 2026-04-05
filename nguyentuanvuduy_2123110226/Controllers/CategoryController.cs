@@ -1,10 +1,7 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using nguyentuanvuduy_2123110226.Data;
 using nguyentuanvuduy_2123110226.DTOs;
-using nguyentuanvuduy_2123110226.Models;
-using System.Linq;
+using nguyentuanvuduy_2123110226.Services;
 
 namespace nguyentuanvuduy_2123110226.Controllers
 {
@@ -12,11 +9,11 @@ namespace nguyentuanvuduy_2123110226.Controllers
     [ApiController]
     public class CategoryController : ControllerBase
     {
-        private readonly AppDbContext _context;
+        private readonly ICategoryService _categoryService;
 
-        public CategoryController(AppDbContext context)
+        public CategoryController(ICategoryService categoryService)
         {
-            _context = context;
+            _categoryService = categoryService;
         }
 
         // GET: api/Category
@@ -26,18 +23,7 @@ namespace nguyentuanvuduy_2123110226.Controllers
             if (page < 1 || size < 1)
                 return BadRequest(new { message = "page và size phải lớn hơn 0" });
 
-            var query = _context.Categories
-                .AsNoTracking()
-                .Where(c => c.IsActive); // ✅ Không dùng Global Filter — tường minh hơn
-
-            var total = await query.CountAsync();
-            var data = await query
-                .OrderByDescending(c => c.CreatedAt)
-                .Skip((page - 1) * size)
-                .Take(size)
-                .Select(c => new CategoryReadDto(c.Id, c.CategoryCode, c.Name, c.Description, c.CreatedAt))
-                .ToListAsync();
-
+            var (total, data) = await _categoryService.GetAllAsync(page, size);
             return Ok(new { total, page, size, data });
         }
 
@@ -45,11 +31,7 @@ namespace nguyentuanvuduy_2123110226.Controllers
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
-            var category = await _context.Categories
-                .AsNoTracking()
-                .Where(c => c.Id == id && c.IsActive)
-                .Select(c => new CategoryReadDto(c.Id, c.CategoryCode, c.Name, c.Description, c.CreatedAt))
-                .FirstOrDefaultAsync();
+            var category = await _categoryService.GetByIdAsync(id);
 
             if (category == null)
                 return NotFound(new { message = $"Không tìm thấy category với Id = {id}" });
@@ -57,7 +39,7 @@ namespace nguyentuanvuduy_2123110226.Controllers
             return Ok(category);
         }
 
-        // POST: api/Category — ✅ KHÓA: Chỉ Admin
+        // POST: api/Category
         [Authorize(Roles = "admin")]
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CategoryCreateDto dto)
@@ -65,26 +47,14 @@ namespace nguyentuanvuduy_2123110226.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            if (await _context.Categories.AnyAsync(c => c.CategoryCode == dto.CategoryCode))
-                return Conflict(new { message = $"CategoryCode '{dto.CategoryCode}' đã tồn tại" });
+            var result = await _categoryService.CreateAsync(dto);
+            if (!result.IsSuccess)
+                return Conflict(new { message = result.Message });
 
-            var category = new Category
-            {
-                CategoryCode = dto.CategoryCode.Trim().ToUpper(),
-                Name = dto.Name.Trim(),
-                Description = dto.Description?.Trim(),
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            _context.Categories.Add(category);
-            await _context.SaveChangesAsync();
-
-            var result = new CategoryReadDto(category.Id, category.CategoryCode, category.Name, category.Description, category.CreatedAt);
-            return CreatedAtAction(nameof(GetById), new { id = category.Id }, result);
+            return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result.Data);
         }
 
-        // POST: api/Category/bulk — ✅ KHÓA: Chỉ Admin
+        // POST: api/Category/bulk
         [Authorize(Roles = "admin")]
         [HttpPost("bulk")]
         public async Task<IActionResult> BulkCreate([FromBody] List<CategoryCreateDto> dtos)
@@ -92,37 +62,15 @@ namespace nguyentuanvuduy_2123110226.Controllers
             if (dtos == null || !dtos.Any())
                 return BadRequest(new { message = "Danh sách trống" });
 
-            var codes = dtos.Select(d => d.CategoryCode.Trim().ToUpper()).ToList();
+            var result = await _categoryService.BulkCreateAsync(dtos);
 
-            var existingCodes = await _context.Categories
-                .Where(c => codes.Contains(c.CategoryCode))
-                .Select(c => c.CategoryCode)
-                .ToListAsync();
+            if (result.Added == 0)
+                return Conflict(new { message = result.Message });
 
-            var toAdd = dtos
-                .Where(d => !existingCodes.Contains(d.CategoryCode.Trim().ToUpper()))
-                .Select(d => new Category
-                {
-                    CategoryCode = d.CategoryCode.Trim().ToUpper(),
-                    Name = d.Name.Trim(),
-                    Description = d.Description?.Trim(),
-                    IsActive = true,
-                    CreatedAt = DateTime.UtcNow
-                }).ToList();
-
-            if (!toAdd.Any())
-                return Conflict(new { message = "Tất cả mã đều đã tồn tại" });
-
-            _context.Categories.AddRange(toAdd);
-            await _context.SaveChangesAsync();
-
-            return Ok(new
-            {
-                message = $"Đã thêm {toAdd.Count} bản ghi, bỏ qua {dtos.Count - toAdd.Count} bản ghi trùng"
-            });
+            return Ok(new { message = result.Message });
         }
 
-        // PUT: api/Category/5 — ✅ KHÓA: Chỉ Admin
+        // PUT: api/Category/5
         [Authorize(Roles = "admin")]
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(int id, [FromBody] CategoryUpdateDto dto)
@@ -130,39 +78,29 @@ namespace nguyentuanvuduy_2123110226.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var category = await _context.Categories
-                .FirstOrDefaultAsync(c => c.Id == id && c.IsActive);
+            var result = await _categoryService.UpdateAsync(id, dto);
 
-            if (category == null)
-                return NotFound(new { message = $"Không tìm thấy category với Id = {id}" });
+            if (!result.IsSuccess)
+            {
+                if (result.StatusCode == 404) return NotFound(new { message = result.Message });
+                return BadRequest(new { message = result.Message });
+            }
 
-            category.Name = dto.Name.Trim();
-            category.Description = dto.Description?.Trim();
-
-            await _context.SaveChangesAsync();
             return NoContent();
         }
 
-        // DELETE: api/Category/5 — ✅ KHÓA: Chỉ Admin
+        // DELETE: api/Category/5
         [Authorize(Roles = "admin")]
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
-            var category = await _context.Categories
-                .FirstOrDefaultAsync(c => c.Id == id && c.IsActive);
+            var result = await _categoryService.DeleteAsync(id);
 
-            if (category == null)
-                return NotFound(new { message = $"Không tìm thấy category với Id = {id}" });
-
-            // Kiểm tra còn Product đang dùng không
-            bool hasProducts = await _context.Products
-                .AnyAsync(p => p.CategoryId == id);
-
-            if (hasProducts)
-                return Conflict(new { message = $"Không thể xóa, vẫn còn sản phẩm thuộc danh mục này" });
-
-            category.IsActive = false;
-            await _context.SaveChangesAsync();
+            if (!result.IsSuccess)
+            {
+                if (result.StatusCode == 404) return NotFound(new { message = result.Message });
+                if (result.StatusCode == 409) return Conflict(new { message = result.Message });
+            }
 
             return NoContent();
         }

@@ -52,12 +52,11 @@ namespace nguyentuanvuduy_2123110226.Models
         [Column(TypeName = "decimal(18,0)")]
         public decimal TotalAmount { get; set; }    // Tổng = SubTotal + ShippingFee
 
-        // Thanh toán: "cod" | "bank_transfer"
+        // Thanh toán (Có thể giữ lại làm "cache" để truy vấn nhanh cho Admin)
         [Required]
         [StringLength(20)]
         public string PaymentMethod { get; set; } = "cod";
 
-        // Trạng thái thanh toán: "unpaid" | "paid"
         [StringLength(20)]
         public string PaymentStatus { get; set; } = "unpaid";
 
@@ -70,7 +69,10 @@ namespace nguyentuanvuduy_2123110226.Models
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-        // Navigation
+        // Navigation (✅ ĐÃ CẬP NHẬT LIÊN KẾT)
         public ICollection<OrderDetail> OrderDetails { get; set; } = new List<OrderDetail>();
+
+        // 1 Đơn hàng có thể có nhiều lịch sử thanh toán (ví dụ: thanh toán lỗi lần 1, thành công lần 2)
+        public ICollection<Payment> Payments { get; set; } = new List<Payment>();
     }
 }
