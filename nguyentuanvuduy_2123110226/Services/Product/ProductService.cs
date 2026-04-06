@@ -21,7 +21,8 @@ namespace nguyentuanvuduy_2123110226.Services
             _environment = environment;
         }
 
-        public async Task<(int Total, IEnumerable<ProductReadDto> Data)> GetAllAsync(int page, int size, int? categoryId)
+        // ✅ 1. Thêm tham số string? keyword = null vào đây
+        public async Task<(int Total, IEnumerable<ProductReadDto> Data)> GetAllAsync(int page, int size, int? categoryId, string? keyword = null)
         {
             var query = _context.Products
                 .AsNoTracking()
@@ -29,6 +30,13 @@ namespace nguyentuanvuduy_2123110226.Services
 
             if (categoryId.HasValue)
                 query = query.Where(p => p.CategoryId == categoryId.Value);
+
+            // ✅ 2. CHÈN LOGIC TÌM KIẾM VÀO CHỖ NÀY (Trước khi đếm Total)
+            if (!string.IsNullOrWhiteSpace(keyword))
+            {
+                // Tìm theo tên sản phẩm HOẶC mã sản phẩm
+                query = query.Where(p => p.Name.Contains(keyword) || p.ProductCode.Contains(keyword));
+            }
 
             var total = await query.CountAsync();
             var data = await query
@@ -44,7 +52,6 @@ namespace nguyentuanvuduy_2123110226.Services
 
             return (total, data);
         }
-
         public async Task<ProductReadDto?> GetByIdAsync(int id)
         {
             return await _context.Products

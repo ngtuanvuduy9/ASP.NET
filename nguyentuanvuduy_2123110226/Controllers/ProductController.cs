@@ -16,14 +16,20 @@ namespace nguyentuanvuduy_2123110226.Controllers
             _productService = productService;
         }
 
-        // GET: api/Product?page=1&size=10&categoryId=1
+        // GET: api/Product?page=1&size=10&categoryId=1&keyword=abc
         [HttpGet]
-        public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int size = 10, [FromQuery] int? categoryId = null)
+        public async Task<IActionResult> GetAll(
+            [FromQuery] int page = 1,
+            [FromQuery] int size = 10,
+            [FromQuery] int? categoryId = null,
+            [FromQuery] string? keyword = null) // ✅ 1. Khai báo thêm tham số keyword nhận từ URL
         {
             if (page < 1 || size < 1)
                 return BadRequest(new { message = "page và size phải lớn hơn 0" });
 
-            var (total, data) = await _productService.GetAllAsync(page, size, categoryId);
+            // ✅ 2. Ném biến keyword vào trong hàm của Service
+            var (total, data) = await _productService.GetAllAsync(page, size, categoryId, keyword);
+
             return Ok(new { total, page, size, data });
         }
 
