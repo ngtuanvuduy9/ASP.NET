@@ -1,5 +1,4 @@
-﻿// Models/OrderDetail.cs
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace nguyentuanvuduy_2123110226.Models
@@ -18,11 +17,11 @@ namespace nguyentuanvuduy_2123110226.Models
         [Required]
         [StringLength(150)]
         public string ProductName { get; set; } = string.Empty;
-        // ✅ Snapshot tên SP lúc đặt — tránh bị đổi tên sau này
+        // Snapshot tên SP lúc đặt — tránh bị đổi tên sau này
 
         [Column(TypeName = "decimal(18,0)")]
         public decimal UnitPrice { get; set; }
-        // ✅ Snapshot giá lúc đặt
+        // Snapshot giá lúc đặt
 
         public int Quantity { get; set; }
 

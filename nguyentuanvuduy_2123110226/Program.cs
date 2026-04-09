@@ -16,6 +16,7 @@ builder.Services.AddScoped<IBlogCategoryService, BlogCategoryService>();
 builder.Services.AddScoped<IBlogService, BlogService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IFavoriteService, FavoriteService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IContactService, ContactService>();
 // Add services to the container.

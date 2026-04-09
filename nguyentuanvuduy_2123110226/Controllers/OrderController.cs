@@ -2,13 +2,25 @@
 using Microsoft.AspNetCore.Mvc;
 using nguyentuanvuduy_2123110226.DTOs;
 using nguyentuanvuduy_2123110226.Services;
+using System.Security.Claims; // 👈 Thêm thư viện này để đọc Token
 
 namespace nguyentuanvuduy_2123110226.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class OrderController(IOrderService orderService) : ControllerBase // 👈 Dùng Primary Constructor cho ngầu
+    public class OrderController(IOrderService orderService) : ControllerBase // 👈 Giữ nguyên Primary Constructor cho ngầu
     {
+        // ✅ HÀM PHỤ TRỢ: Lấy ID khách hàng từ Token (nếu có)
+        private int? GetCurrentCustomerId()
+        {
+            var idClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (idClaim != null && int.TryParse(idClaim.Value, out int customerId))
+            {
+                return customerId;
+            }
+            return null; // Trả về null nếu là khách vãng lai
+        }
+
         // GET: api/Order?page=1&size=10&status=pending
         [Authorize(Roles = "admin")]
         [HttpGet]
@@ -39,13 +51,27 @@ namespace nguyentuanvuduy_2123110226.Controllers
             return Ok(order);
         }
 
+        // ✅ TÍNH NĂNG MỚI BỔ SUNG: Lấy danh sách đơn hàng của user đang đăng nhập
+        [Authorize] // Bắt buộc đăng nhập
+        [HttpGet("my-orders")]
+        public async Task<IActionResult> GetMyOrders()
+        {
+            var customerId = GetCurrentCustomerId();
+            if (customerId == null) return Unauthorized(new { message = "Vui lòng đăng nhập để xem đơn hàng." });
+
+            var data = await orderService.GetMyOrdersAsync(customerId.Value);
+            return Ok(new { data });
+        }
+
         // POST: api/Order
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] OrderCreateDto dto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
-            var result = await orderService.CreateAsync(dto);
+            // ✅ Tự động lấy ID khách truyền vào Service (null nếu chưa đăng nhập)
+            var customerId = GetCurrentCustomerId();
+            var result = await orderService.CreateAsync(customerId, dto);
 
             if (!result.IsSuccess)
             {
@@ -54,6 +80,7 @@ namespace nguyentuanvuduy_2123110226.Controllers
                 return BadRequest(new { message = result.Message });
             }
 
+            // Giữ nguyên kiểu trả về siêu chi tiết của bạn
             return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, new
             {
                 result.Data.Id,

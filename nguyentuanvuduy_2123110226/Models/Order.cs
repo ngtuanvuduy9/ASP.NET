@@ -1,5 +1,4 @@
-﻿// Models/Order.cs
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace nguyentuanvuduy_2123110226.Models
@@ -14,17 +13,22 @@ namespace nguyentuanvuduy_2123110226.Models
         public string OrderCode { get; set; } = string.Empty;
         // VD: "ORD-20260327-0001"
 
-        // Thông tin khách hàng (guest checkout — không cần FK)
+        // ✅ 1. LIÊN KẾT KHÁCH HÀNG (Bắt buộc phải là Nullable 'int?' cho khách vãng lai)
+        public int? CustomerId { get; set; }
+        [ForeignKey("CustomerId")]
+        public Customer? Customer { get; set; }
+
+        // ✅ 2. THÔNG TIN NGƯỜI NHẬN (Đổi tên thành Receiver cho chuẩn nghĩa Snapshot)
         [Required]
         [StringLength(100)]
-        public string FullName { get; set; } = string.Empty;
+        public string ReceiverName { get; set; } = string.Empty;
 
         [Required]
         [StringLength(15)]
-        public string Phone { get; set; } = string.Empty;
+        public string ReceiverPhone { get; set; } = string.Empty;
 
         [StringLength(100)]
-        public string? Email { get; set; }
+        public string? ReceiverEmail { get; set; }
 
         // Địa chỉ giao hàng
         [Required]
@@ -42,17 +46,22 @@ namespace nguyentuanvuduy_2123110226.Models
         [StringLength(500)]
         public string? Note { get; set; }
 
-        // Tiền
+        // ✅ 3. XỬ LÝ TIỀN BẠC & ĐIỂM GIẢM GIÁ
         [Column(TypeName = "decimal(18,0)")]
-        public decimal SubTotal { get; set; }       // Tạm tính
+        public decimal SubTotal { get; set; }       // Tạm tính (Tiền hàng)
+
+        public int PointsUsed { get; set; } = 0;    // Số điểm khách đã dùng để trừ tiền
+
+        [Column(TypeName = "decimal(18,0)")]
+        public decimal DiscountAmount { get; set; } = 0; // Số tiền được giảm (VD: Dùng 20 điểm = Giảm 20.000đ)
 
         [Column(TypeName = "decimal(18,0)")]
         public decimal ShippingFee { get; set; } = 30000;
 
         [Column(TypeName = "decimal(18,0)")]
-        public decimal TotalAmount { get; set; }    // Tổng = SubTotal + ShippingFee
+        public decimal TotalAmount { get; set; }    // Tổng cuối = SubTotal + ShippingFee - DiscountAmount
 
-        // Thanh toán (Có thể giữ lại làm "cache" để truy vấn nhanh cho Admin)
+        // ✅ 4. THANH TOÁN (Giữ nguyên chờ tích hợp VNPAY/MoMo)
         [Required]
         [StringLength(20)]
         public string PaymentMethod { get; set; } = "cod";
@@ -69,10 +78,10 @@ namespace nguyentuanvuduy_2123110226.Models
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-        // Navigation (✅ ĐÃ CẬP NHẬT LIÊN KẾT)
+        // Navigation
         public ICollection<OrderDetail> OrderDetails { get; set; } = new List<OrderDetail>();
 
-        // 1 Đơn hàng có thể có nhiều lịch sử thanh toán (ví dụ: thanh toán lỗi lần 1, thành công lần 2)
-        public ICollection<Payment> Payments { get; set; } = new List<Payment>();
+        // (Nếu bạn đã có class Payment, hãy mở comment dòng này. Nếu chưa thì cứ comment lại)
+         public ICollection<Payment> Payments { get; set; } = new List<Payment>();
     }
 }

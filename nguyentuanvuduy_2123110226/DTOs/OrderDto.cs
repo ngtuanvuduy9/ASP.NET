@@ -2,16 +2,17 @@
 
 namespace nguyentuanvuduy_2123110226.DTOs
 {
-    // Dùng khi khách hàng gửi Request Đặt hàng
+    // 1. Dùng khi khách hàng gửi Request Đặt hàng (Đã đổi tên FullName -> ReceiverName và thêm Points)
     public record OrderCreateDto(
-        [Required][StringLength(100)] string FullName,
-        [Required][StringLength(15)] string Phone,
-        [StringLength(100)] string? Email,
+        [Required][StringLength(100)] string ReceiverName,
+        [Required][StringLength(15)] string ReceiverPhone,
+        [StringLength(100)] string? ReceiverEmail,
         [Required][StringLength(100)] string Province,
         [Required][StringLength(100)] string District,
         [Required][StringLength(255)] string Address,
         [StringLength(500)] string? Note,
         [Required] string PaymentMethod,   // "cod" | "bank_transfer" | "momo"
+        int PointsToUse, // ✅ BƯỚC MỚI: Số điểm khách muốn dùng (React truyền lên 0 nếu không dùng)
         [Required] List<OrderDetailCreateDto> Items
     );
 
@@ -20,26 +21,29 @@ namespace nguyentuanvuduy_2123110226.DTOs
         [Required][Range(1, int.MaxValue)] int Quantity
     );
 
-    // Dùng khi trả dữ liệu Đơn hàng cho Admin/Khách hàng xem
+    // 2. Dùng khi trả dữ liệu Đơn hàng cho Admin/Khách hàng xem (Đã thêm CustomerId, PointsUsed, DiscountAmount)
     public record OrderReadDto(
         int Id,
         string OrderCode,
-        string FullName,
-        string Phone,
-        string? Email,
+        int? CustomerId, // ✅ Nullable cho khách vãng lai
+        string ReceiverName,
+        string ReceiverPhone,
+        string? ReceiverEmail,
         string Province,
         string District,
         string Address,
         string? Note,
         decimal SubTotal,
+        int PointsUsed,       // ✅ Số điểm đã trừ
+        decimal DiscountAmount, // ✅ Số tiền được giảm
         decimal ShippingFee,
         decimal TotalAmount,
         string PaymentMethod,
         string PaymentStatus,
         string Status,
         DateTime CreatedAt,
-        List<OrderDetailReadDto> Items,
-        List<PaymentReadDto> Payments // Danh sách lịch sử thanh toán
+        List<OrderDetailReadDto> Items
+    // List<PaymentReadDto> Payments // ⚠️ Tạm thời comment dòng này, khi nào làm tới file Payment thì mở ra nhé!
     );
 
     public record OrderDetailReadDto(
@@ -50,26 +54,27 @@ namespace nguyentuanvuduy_2123110226.DTOs
         decimal SubTotal
     );
 
-    // Dùng khi Admin cập nhật trạng thái Giao hàng
+    // 3. Dùng khi Admin cập nhật trạng thái Giao hàng
     public record OrderStatusUpdateDto(
         [Required] string Status   // pending | confirmed | shipping | delivered | cancelled
     );
-    // DTO gộp cho danh sách GetAll
+
+    // 4. DTO gộp cho danh sách GetAll (Đã đổi FullName thành ReceiverName)
     public record OrderSummaryDto(
-        int Id, string OrderCode, string FullName, string Phone,
+        int Id, string OrderCode, string ReceiverName, string ReceiverPhone,
         decimal TotalAmount, string PaymentMethod, string PaymentStatus,
         string Status, DateTime CreatedAt
     );
 
-    // DTO cho hàm Track (Theo dõi đơn hàng)
+    // 5. DTO cho hàm Track (Theo dõi đơn hàng - Đã đổi FullName thành ReceiverName)
     public record OrderTrackDto(
-        string OrderCode, string FullName, string Status,
+        string OrderCode, string ReceiverName, string Status,
         string PaymentMethod, string PaymentStatus, decimal TotalAmount,
         DateTime CreatedAt, List<OrderTrackItemDto> Items
     );
     public record OrderTrackItemDto(string ProductName, decimal UnitPrice, int Quantity, decimal SubTotal);
 
-    // DTO trả về khi Create thành công
+    // 6. DTO trả về khi Create thành công
     public record OrderCreateResponseDto(
         int Id, string OrderCode, decimal TotalAmount, string PaymentMethod
     );

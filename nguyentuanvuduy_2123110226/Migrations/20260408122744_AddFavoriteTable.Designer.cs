@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using nguyentuanvuduy_2123110226.Data;
 
@@ -11,9 +12,11 @@ using nguyentuanvuduy_2123110226.Data;
 namespace nguyentuanvuduy_2123110226.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260408122744_AddFavoriteTable")]
+    partial class AddFavoriteTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -198,13 +201,16 @@ namespace nguyentuanvuduy_2123110226.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int?>("CustomerId")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("DiscountAmount")
-                        .HasColumnType("decimal(18,0)");
-
                     b.Property<string>("District")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("FullName")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
@@ -231,27 +237,15 @@ namespace nguyentuanvuduy_2123110226.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
-                    b.Property<int>("PointsUsed")
-                        .HasColumnType("int");
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(15)
+                        .HasColumnType("nvarchar(15)");
 
                     b.Property<string>("Province")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("ReceiverEmail")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("ReceiverName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("ReceiverPhone")
-                        .IsRequired()
-                        .HasMaxLength(15)
-                        .HasColumnType("nvarchar(15)");
 
                     b.Property<decimal>("ShippingFee")
                         .HasColumnType("decimal(18,0)");
@@ -271,8 +265,6 @@ namespace nguyentuanvuduy_2123110226.Migrations
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("CustomerId");
 
                     b.ToTable("Orders");
                 });
@@ -504,15 +496,6 @@ namespace nguyentuanvuduy_2123110226.Migrations
                     b.Navigation("Customer");
 
                     b.Navigation("Product");
-                });
-
-            modelBuilder.Entity("nguyentuanvuduy_2123110226.Models.Order", b =>
-                {
-                    b.HasOne("nguyentuanvuduy_2123110226.Models.Customer", "Customer")
-                        .WithMany()
-                        .HasForeignKey("CustomerId");
-
-                    b.Navigation("Customer");
                 });
 
             modelBuilder.Entity("nguyentuanvuduy_2123110226.Models.OrderDetail", b =>

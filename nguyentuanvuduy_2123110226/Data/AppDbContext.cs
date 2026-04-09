@@ -20,6 +20,7 @@ namespace nguyentuanvuduy_2123110226.Data
         public DbSet<BlogCategory> BlogCategories { get; set; }
         public DbSet<Payment> Payments { get; set; }
 
+        public DbSet<Favorite> Favorites { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);

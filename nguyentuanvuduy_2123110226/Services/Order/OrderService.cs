@@ -20,7 +20,7 @@ namespace nguyentuanvuduy_2123110226.Services
                 .Skip((page - 1) * size)
                 .Take(size)
                 .Select(o => new OrderSummaryDto(
-                    o.Id, o.OrderCode, o.FullName, o.Phone,
+                    o.Id, o.OrderCode, o.ReceiverName, o.ReceiverPhone, // Đổi FullName thành ReceiverName
                     o.TotalAmount, o.PaymentMethod, o.PaymentStatus,
                     o.Status, o.CreatedAt
                 ))
@@ -35,16 +35,14 @@ namespace nguyentuanvuduy_2123110226.Services
                 .AsNoTracking()
                 .Where(o => o.Id == id && o.IsActive)
                 .Select(o => new OrderReadDto(
-                    o.Id, o.OrderCode, o.FullName, o.Phone, o.Email,
+                    o.Id, o.OrderCode, o.CustomerId, o.ReceiverName, o.ReceiverPhone, o.ReceiverEmail,
                     o.Province, o.District, o.Address, o.Note,
-                    o.SubTotal, o.ShippingFee, o.TotalAmount,
+                    o.SubTotal, o.PointsUsed, o.DiscountAmount, o.ShippingFee, o.TotalAmount,
                     o.PaymentMethod, o.PaymentStatus, o.Status, o.CreatedAt,
                     o.OrderDetails.Select(d => new OrderDetailReadDto(
                         d.ProductId, d.ProductName, d.UnitPrice, d.Quantity, d.SubTotal
-                    )).ToList(),
-                    o.Payments.Select(p => new PaymentReadDto(
-                        p.Id, p.PaymentMethod, p.Amount, p.Status, p.TransactionId, p.PaymentDate
                     )).ToList()
+                // Bỏ qua Map Payment nếu bạn đang comment nó trong DTO
                 ))
                 .FirstOrDefaultAsync();
         }
@@ -55,7 +53,7 @@ namespace nguyentuanvuduy_2123110226.Services
                 .AsNoTracking()
                 .Where(o => o.OrderCode == orderCode && o.IsActive)
                 .Select(o => new OrderTrackDto(
-                    o.OrderCode, o.FullName, o.Status, o.PaymentMethod,
+                    o.OrderCode, o.ReceiverName, o.Status, o.PaymentMethod,
                     o.PaymentStatus, o.TotalAmount, o.CreatedAt,
                     o.OrderDetails.Select(d => new OrderTrackItemDto(
                         d.ProductName, d.UnitPrice, d.Quantity, d.SubTotal
@@ -64,7 +62,22 @@ namespace nguyentuanvuduy_2123110226.Services
                 .FirstOrDefaultAsync();
         }
 
-        public async Task<(bool IsSuccess, int StatusCode, string Message, OrderCreateResponseDto? Data)> CreateAsync(OrderCreateDto dto)
+        // Bổ sung hàm Lấy danh sách đơn của 1 Khách hàng
+        public async Task<IEnumerable<OrderSummaryDto>> GetMyOrdersAsync(int customerId)
+        {
+            return await context.Orders
+                .AsNoTracking()
+                .Where(o => o.CustomerId == customerId && o.IsActive)
+                .OrderByDescending(o => o.CreatedAt)
+                .Select(o => new OrderSummaryDto(
+                    o.Id, o.OrderCode, o.ReceiverName, o.ReceiverPhone,
+                    o.TotalAmount, o.PaymentMethod, o.PaymentStatus,
+                    o.Status, o.CreatedAt
+                ))
+                .ToListAsync();
+        }
+
+        public async Task<(bool IsSuccess, int StatusCode, string Message, OrderCreateResponseDto? Data)> CreateAsync(int? customerId, OrderCreateDto dto)
         {
             var validPayments = new[] { "cod", "bank_transfer", "momo" };
             if (!validPayments.Contains(dto.PaymentMethod))
@@ -105,22 +118,50 @@ namespace nguyentuanvuduy_2123110226.Services
 
             var subTotal = details.Sum(d => d.SubTotal);
             var shippingFee = 30000m;
-            var totalAmount = subTotal + shippingFee;
+
+            // XỬ LÝ ĐIỂM GIẢM GIÁ
+            decimal discountAmount = 0;
+            int pointsUsed = 0;
+
+            if (customerId.HasValue && dto.PointsToUse > 0)
+            {
+                var customer = await context.Customers.FindAsync(customerId.Value);
+                if (customer != null && customer.Points >= dto.PointsToUse)
+                {
+                    pointsUsed = dto.PointsToUse;
+                    discountAmount = pointsUsed * 1000m; // 1 điểm = 1.000đ
+                    customer.Points -= pointsUsed; // Trừ điểm trong DB
+                }
+                else
+                {
+                    return (false, 400, "Điểm tích lũy không hợp lệ hoặc không đủ!", null);
+                }
+            }
+
+            // TÍNH LẠI TỔNG TIỀN SAU KHI GIẢM
+            var totalAmount = subTotal + shippingFee - discountAmount;
+            if (totalAmount < 0) totalAmount = 0;
+
             var orderCode = $"ORD-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..4].ToUpper()}";
 
             var order = new Order
             {
                 OrderCode = orderCode,
-                FullName = dto.FullName.Trim(),
-                Phone = dto.Phone.Trim(),
-                Email = dto.Email?.Trim(),
+                CustomerId = customerId, // Thêm CustomerId
+                ReceiverName = dto.ReceiverName.Trim(),
+                ReceiverPhone = dto.ReceiverPhone.Trim(),
+                ReceiverEmail = dto.ReceiverEmail?.Trim(),
                 Province = dto.Province.Trim(),
                 District = dto.District.Trim(),
                 Address = dto.Address.Trim(),
                 Note = dto.Note?.Trim(),
+
                 SubTotal = subTotal,
+                PointsUsed = pointsUsed,             // Lưu điểm đã dùng
+                DiscountAmount = discountAmount,     // Lưu tiền được giảm
                 ShippingFee = shippingFee,
                 TotalAmount = totalAmount,
+
                 PaymentMethod = dto.PaymentMethod,
                 PaymentStatus = "unpaid",
                 Status = "pending",
@@ -130,6 +171,7 @@ namespace nguyentuanvuduy_2123110226.Services
                 OrderDetails = details
             };
 
+            // Nếu bạn có class Payment, hãy giữ lại. Nếu ko hãy comment dòng này.
             var payment = new Models.Payment
             {
                 PaymentMethod = dto.PaymentMethod,
@@ -163,6 +205,7 @@ namespace nguyentuanvuduy_2123110226.Services
 
             if (dto.Status == "cancelled")
             {
+                // Hoàn tồn kho (Giữ nguyên logic cực đỉnh của bạn)
                 var productIds = order.OrderDetails.Select(d => d.ProductId).ToList();
                 var products = await context.Products.Where(p => productIds.Contains(p.Id)).ToListAsync();
                 foreach (var detail in order.OrderDetails)
@@ -174,6 +217,14 @@ namespace nguyentuanvuduy_2123110226.Services
                         if (p.StockQuantity > 0 && p.Status == "out_of_stock") p.Status = "in_stock";
                     }
                 }
+
+                // HOÀN ĐIỂM (Bổ sung thêm)
+                if (order.CustomerId.HasValue && order.PointsUsed > 0)
+                {
+                    var customer = await context.Customers.FindAsync(order.CustomerId.Value);
+                    if (customer != null) customer.Points += order.PointsUsed;
+                }
+
                 var pendingPayments = order.Payments.Where(p => p.Status == "pending");
                 foreach (var p in pendingPayments) p.Status = "failed";
             }
