@@ -56,21 +56,26 @@ namespace nguyentuanvuduy_2123110226.DTOs
 
     // 3. Dùng khi Admin cập nhật trạng thái Giao hàng
     public record OrderStatusUpdateDto(
-        [Required] string Status   // pending | confirmed | shipping | delivered | cancelled
+        [Required] string Status,   // pending | confirmed | shipping | delivered | cancelled
+        string? CancelReason = null // ✅ Bổ sung thêm dòng này
     );
 
     // 4. DTO gộp cho danh sách GetAll (Đã đổi FullName thành ReceiverName)
     public record OrderSummaryDto(
         int Id, string OrderCode, string ReceiverName, string ReceiverPhone,
         decimal TotalAmount, string PaymentMethod, string PaymentStatus,
-        string Status, DateTime CreatedAt
+        string Status,
+        string? CancelReason,
+        DateTime CreatedAt
     );
 
     // 5. DTO cho hàm Track (Theo dõi đơn hàng - Đã đổi FullName thành ReceiverName)
     public record OrderTrackDto(
         string OrderCode, string ReceiverName, string Status,
         string PaymentMethod, string PaymentStatus, decimal TotalAmount,
-        DateTime CreatedAt, List<OrderTrackItemDto> Items
+        DateTime CreatedAt,
+        string? CancelReason, 
+        List<OrderTrackItemDto> Items
     );
     public record OrderTrackItemDto(string ProductName, decimal UnitPrice, int Quantity, decimal SubTotal);
 

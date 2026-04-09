@@ -18,7 +18,8 @@ namespace nguyentuanvuduy_2123110226.DTOs
         DateTime CreatedAt,
         DateTime UpdatedAt,
         int CategoryId,
-        string CategoryName  // ✅ Join từ Category
+        string CategoryName,
+        bool IsFavorite// ✅ Join từ Category
     );
 
     public record ProductCreateDto(

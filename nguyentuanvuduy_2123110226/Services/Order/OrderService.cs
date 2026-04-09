@@ -23,7 +23,7 @@ namespace nguyentuanvuduy_2123110226.Services
                 .Select(o => new OrderSummaryDto(
                     o.Id, o.OrderCode, o.ReceiverName, o.ReceiverPhone,
                     o.TotalAmount, o.PaymentMethod, o.PaymentStatus,
-                    o.Status, o.CreatedAt
+                    o.Status, o.CancelReason, o.CreatedAt
                 ))
                 .ToListAsync();
             return (total, data);
@@ -54,6 +54,7 @@ namespace nguyentuanvuduy_2123110226.Services
                 .Select(o => new OrderTrackDto(
                     o.OrderCode, o.ReceiverName, o.Status, o.PaymentMethod,
                     o.PaymentStatus, o.TotalAmount, o.CreatedAt,
+                    o.CancelReason, // ✅ Trả về Lý do hủy (nếu có)
                     o.OrderDetails.Select(d => new OrderTrackItemDto(
                         d.ProductName, d.UnitPrice, d.Quantity, d.SubTotal
                     )).ToList()
@@ -70,7 +71,7 @@ namespace nguyentuanvuduy_2123110226.Services
                 .Select(o => new OrderSummaryDto(
                     o.Id, o.OrderCode, o.ReceiverName, o.ReceiverPhone,
                     o.TotalAmount, o.PaymentMethod, o.PaymentStatus,
-                    o.Status, o.CreatedAt
+                    o.Status, o.CancelReason, o.CreatedAt
                 ))
                 .ToListAsync();
         }
@@ -177,7 +178,6 @@ namespace nguyentuanvuduy_2123110226.Services
             {
                 try
                 {
-                    // ✅ GIẢI PHÁP: Tạo mã orderCode duy nhất cho PayOS để tránh lỗi Duplicate
                     long uniquePayosCode = long.Parse(DateTime.Now.ToString("yyMMddHHmm") + order.Id.ToString());
 
                     var paymentRequest = new CreatePaymentLinkRequest
@@ -194,9 +194,7 @@ namespace nguyentuanvuduy_2123110226.Services
                 }
                 catch (Exception ex)
                 {
-                    // Log lỗi để debug nếu cần
-                    Console.WriteLine("PayOS Error: " + ex.Message);
-                    return (true, 201, $"Đặt hàng thành công, nhưng QR đang gặp lỗi: {ex.Message}",
+                    return (true, 201, $"Đặt hàng thành công, nhưng lỗi QR: {ex.Message}",
                         new OrderCreateResponseDto(order.Id, order.OrderCode, order.TotalAmount, "cod", null));
                 }
             }
@@ -222,6 +220,9 @@ namespace nguyentuanvuduy_2123110226.Services
 
             if (dto.Status == "cancelled")
             {
+                // ✅ LƯU LÝ DO HỦY ĐƠN HÀNG VÀO DATABASE
+                order.CancelReason = dto.CancelReason;
+
                 var productIds = order.OrderDetails.Select(d => d.ProductId).ToList();
                 var products = await context.Products.Where(p => productIds.Contains(p.Id)).ToListAsync();
                 foreach (var detail in order.OrderDetails)

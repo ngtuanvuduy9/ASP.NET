@@ -45,6 +45,9 @@ namespace nguyentuanvuduy_2123110226.Models
 
         [StringLength(500)]
         public string? Note { get; set; }
+        // ✅ THÊM CỘT NÀY ĐỂ LƯU LÝ DO HỦY
+        [StringLength(500)]
+        public string? CancelReason { get; set; }
 
         // ✅ 3. XỬ LÝ TIỀN BẠC & ĐIỂM GIẢM GIÁ
         [Column(TypeName = "decimal(18,0)")]
