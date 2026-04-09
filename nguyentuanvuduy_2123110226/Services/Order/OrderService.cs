@@ -2,30 +2,30 @@
 using nguyentuanvuduy_2123110226.Data;
 using nguyentuanvuduy_2123110226.DTOs;
 using nguyentuanvuduy_2123110226.Models;
+using PayOS;
+using PayOS.Models;
+using PayOS.Models.V2.PaymentRequests;
 
 namespace nguyentuanvuduy_2123110226.Services
 {
-    public class OrderService(AppDbContext context) : IOrderService
+    public class OrderService(AppDbContext context, PayOSClient payOSClient) : IOrderService
     {
         public async Task<(int Total, IEnumerable<OrderSummaryDto> Data)> GetAllAsync(int page, int size, string? status)
         {
             var query = context.Orders.AsNoTracking().Where(o => o.IsActive);
-
             if (!string.IsNullOrEmpty(status))
                 query = query.Where(o => o.Status == status);
-
             var total = await query.CountAsync();
             var data = await query
                 .OrderByDescending(o => o.CreatedAt)
                 .Skip((page - 1) * size)
                 .Take(size)
                 .Select(o => new OrderSummaryDto(
-                    o.Id, o.OrderCode, o.ReceiverName, o.ReceiverPhone, // Đổi FullName thành ReceiverName
+                    o.Id, o.OrderCode, o.ReceiverName, o.ReceiverPhone,
                     o.TotalAmount, o.PaymentMethod, o.PaymentStatus,
                     o.Status, o.CreatedAt
                 ))
                 .ToListAsync();
-
             return (total, data);
         }
 
@@ -42,7 +42,6 @@ namespace nguyentuanvuduy_2123110226.Services
                     o.OrderDetails.Select(d => new OrderDetailReadDto(
                         d.ProductId, d.ProductName, d.UnitPrice, d.Quantity, d.SubTotal
                     )).ToList()
-                // Bỏ qua Map Payment nếu bạn đang comment nó trong DTO
                 ))
                 .FirstOrDefaultAsync();
         }
@@ -62,7 +61,6 @@ namespace nguyentuanvuduy_2123110226.Services
                 .FirstOrDefaultAsync();
         }
 
-        // Bổ sung hàm Lấy danh sách đơn của 1 Khách hàng
         public async Task<IEnumerable<OrderSummaryDto>> GetMyOrdersAsync(int customerId)
         {
             return await context.Orders
@@ -85,7 +83,6 @@ namespace nguyentuanvuduy_2123110226.Services
 
             var productIds = dto.Items.Select(i => i.ProductId).ToList();
             var products = await context.Products.Where(p => productIds.Contains(p.Id) && p.IsActive).ToListAsync();
-
             var missingIds = productIds.Except(products.Select(p => p.Id)).ToList();
             if (missingIds.Any())
                 return (false, 404, $"Sản phẩm không tồn tại: {string.Join(", ", missingIds)}", null);
@@ -105,7 +102,6 @@ namespace nguyentuanvuduy_2123110226.Services
                 var p = products.First(x => x.Id == item.ProductId);
                 p.StockQuantity -= item.Quantity;
                 if (p.StockQuantity == 0) p.Status = "out_of_stock";
-
                 details.Add(new OrderDetail
                 {
                     ProductId = p.Id,
@@ -118,8 +114,6 @@ namespace nguyentuanvuduy_2123110226.Services
 
             var subTotal = details.Sum(d => d.SubTotal);
             var shippingFee = 30000m;
-
-            // XỬ LÝ ĐIỂM GIẢM GIÁ
             decimal discountAmount = 0;
             int pointsUsed = 0;
 
@@ -129,8 +123,8 @@ namespace nguyentuanvuduy_2123110226.Services
                 if (customer != null && customer.Points >= dto.PointsToUse)
                 {
                     pointsUsed = dto.PointsToUse;
-                    discountAmount = pointsUsed * 1000m; // 1 điểm = 1.000đ
-                    customer.Points -= pointsUsed; // Trừ điểm trong DB
+                    discountAmount = pointsUsed * 1000m;
+                    customer.Points -= pointsUsed;
                 }
                 else
                 {
@@ -138,16 +132,14 @@ namespace nguyentuanvuduy_2123110226.Services
                 }
             }
 
-            // TÍNH LẠI TỔNG TIỀN SAU KHI GIẢM
             var totalAmount = subTotal + shippingFee - discountAmount;
             if (totalAmount < 0) totalAmount = 0;
 
             var orderCode = $"ORD-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString()[..4].ToUpper()}";
-
             var order = new Order
             {
                 OrderCode = orderCode,
-                CustomerId = customerId, // Thêm CustomerId
+                CustomerId = customerId,
                 ReceiverName = dto.ReceiverName.Trim(),
                 ReceiverPhone = dto.ReceiverPhone.Trim(),
                 ReceiverEmail = dto.ReceiverEmail?.Trim(),
@@ -155,13 +147,11 @@ namespace nguyentuanvuduy_2123110226.Services
                 District = dto.District.Trim(),
                 Address = dto.Address.Trim(),
                 Note = dto.Note?.Trim(),
-
                 SubTotal = subTotal,
-                PointsUsed = pointsUsed,             // Lưu điểm đã dùng
-                DiscountAmount = discountAmount,     // Lưu tiền được giảm
+                PointsUsed = pointsUsed,
+                DiscountAmount = discountAmount,
                 ShippingFee = shippingFee,
                 TotalAmount = totalAmount,
-
                 PaymentMethod = dto.PaymentMethod,
                 PaymentStatus = "unpaid",
                 Status = "pending",
@@ -171,7 +161,6 @@ namespace nguyentuanvuduy_2123110226.Services
                 OrderDetails = details
             };
 
-            // Nếu bạn có class Payment, hãy giữ lại. Nếu ko hãy comment dòng này.
             var payment = new Models.Payment
             {
                 PaymentMethod = dto.PaymentMethod,
@@ -180,11 +169,39 @@ namespace nguyentuanvuduy_2123110226.Services
                 PaymentDate = DateTime.UtcNow
             };
             order.Payments.Add(payment);
-
             context.Orders.Add(order);
             await context.SaveChangesAsync();
 
-            var result = new OrderCreateResponseDto(order.Id, order.OrderCode, order.TotalAmount, order.PaymentMethod);
+            string? checkoutUrl = null;
+            if (dto.PaymentMethod == "bank_transfer" && totalAmount > 0)
+            {
+                try
+                {
+                    // ✅ GIẢI PHÁP: Tạo mã orderCode duy nhất cho PayOS để tránh lỗi Duplicate
+                    long uniquePayosCode = long.Parse(DateTime.Now.ToString("yyMMddHHmm") + order.Id.ToString());
+
+                    var paymentRequest = new CreatePaymentLinkRequest
+                    {
+                        OrderCode = uniquePayosCode,
+                        Amount = (int)totalAmount,
+                        Description = $"Thanh toan don {order.Id}",
+                        ReturnUrl = "http://localhost:5173/my-orders?status=success",
+                        CancelUrl = "http://localhost:5173/checkout?status=cancel"
+                    };
+
+                    var paymentLink = await payOSClient.PaymentRequests.CreateAsync(paymentRequest);
+                    checkoutUrl = paymentLink.CheckoutUrl;
+                }
+                catch (Exception ex)
+                {
+                    // Log lỗi để debug nếu cần
+                    Console.WriteLine("PayOS Error: " + ex.Message);
+                    return (true, 201, $"Đặt hàng thành công, nhưng QR đang gặp lỗi: {ex.Message}",
+                        new OrderCreateResponseDto(order.Id, order.OrderCode, order.TotalAmount, "cod", null));
+                }
+            }
+
+            var result = new OrderCreateResponseDto(order.Id, order.OrderCode, order.TotalAmount, order.PaymentMethod, checkoutUrl);
             return (true, 201, "Đặt hàng thành công!", result);
         }
 
@@ -198,14 +215,13 @@ namespace nguyentuanvuduy_2123110226.Services
                 .Include(o => o.OrderDetails)
                 .Include(o => o.Payments)
                 .FirstOrDefaultAsync(o => o.Id == id && o.IsActive);
-
             if (order == null) return (false, 404, $"Không tìm thấy đơn hàng Id = {id}");
+
             if (order.Status is "delivered" or "cancelled")
                 return (false, 409, $"Đã {order.Status}, không thể sửa.");
 
             if (dto.Status == "cancelled")
             {
-                // Hoàn tồn kho (Giữ nguyên logic cực đỉnh của bạn)
                 var productIds = order.OrderDetails.Select(d => d.ProductId).ToList();
                 var products = await context.Products.Where(p => productIds.Contains(p.Id)).ToListAsync();
                 foreach (var detail in order.OrderDetails)
@@ -217,14 +233,11 @@ namespace nguyentuanvuduy_2123110226.Services
                         if (p.StockQuantity > 0 && p.Status == "out_of_stock") p.Status = "in_stock";
                     }
                 }
-
-                // HOÀN ĐIỂM (Bổ sung thêm)
                 if (order.CustomerId.HasValue && order.PointsUsed > 0)
                 {
                     var customer = await context.Customers.FindAsync(order.CustomerId.Value);
                     if (customer != null) customer.Points += order.PointsUsed;
                 }
-
                 var pendingPayments = order.Payments.Where(p => p.Status == "pending");
                 foreach (var p in pendingPayments) p.Status = "failed";
             }
@@ -251,11 +264,9 @@ namespace nguyentuanvuduy_2123110226.Services
         {
             var order = await context.Orders.FirstOrDefaultAsync(o => o.Id == id && o.IsActive);
             if (order == null) return (false, 404, $"Không tìm thấy đơn hàng với Id = {id}");
-
             order.IsActive = false;
             order.UpdatedAt = DateTime.UtcNow;
             await context.SaveChangesAsync();
-
             return (true, 204, "Xóa (soft delete) thành công");
         }
     }

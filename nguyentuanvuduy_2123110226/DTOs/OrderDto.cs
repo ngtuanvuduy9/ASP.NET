@@ -76,6 +76,10 @@ namespace nguyentuanvuduy_2123110226.DTOs
 
     // 6. DTO trả về khi Create thành công
     public record OrderCreateResponseDto(
-        int Id, string OrderCode, decimal TotalAmount, string PaymentMethod
-    );
+            int Id,
+            string OrderCode,
+            decimal TotalAmount,
+            string PaymentMethod,
+            string? CheckoutUrl // ĐỂ LƯU LINK MỞ MÃ QR CỦA PAYOS
+        );
 }

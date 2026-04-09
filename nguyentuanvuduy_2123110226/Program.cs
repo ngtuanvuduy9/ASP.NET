@@ -5,9 +5,15 @@ using Microsoft.OpenApi.Models;
 using nguyentuanvuduy_2123110226.Data;
 using nguyentuanvuduy_2123110226.Services;
 using System.Text;
-
+// Nhớ thêm dòng using này ở tít trên cùng file Program.cs:
+using PayOS;// Đăng ký PayOSClient như một Singleton (chỉ tạo 1 lần dùng mãi mãi)
 var builder = WebApplication.CreateBuilder(args);
-
+// ====================================================
+// ✅ CẤU HÌNH PAYOS (PHẢI ĐẶT Ở ĐÂY, SAU KHI CÓ builder)
+// ====================================================
+var payOsClientId = builder.Configuration["PayOS:ClientId"] ?? throw new Exception("Thiếu ClientId");
+var payOsApiKey = builder.Configuration["PayOS:ApiKey"] ?? throw new Exception("Thiếu ApiKey");
+var payOsChecksumKey = builder.Configuration["PayOS:ChecksumKey"] ?? throw new Exception("Thiếu ChecksumKey");
 // Đăng ký Dependency Injection cho CategoryService
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<IProductService, ProductService>();
@@ -19,6 +25,8 @@ builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IFavoriteService, FavoriteService>();
 builder.Services.AddScoped<ICustomerService, CustomerService>();
 builder.Services.AddScoped<IContactService, ContactService>();
+builder.Services.AddSingleton(new PayOSClient(payOsClientId, payOsApiKey, payOsChecksumKey));
+
 // Add services to the container.
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));

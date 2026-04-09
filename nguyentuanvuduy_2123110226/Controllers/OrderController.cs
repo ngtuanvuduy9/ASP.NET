@@ -87,6 +87,7 @@ namespace nguyentuanvuduy_2123110226.Controllers
                 result.Data.OrderCode,
                 result.Data.TotalAmount,
                 result.Data.PaymentMethod,
+                result.Data.CheckoutUrl,
                 message = result.Message
             });
         }
