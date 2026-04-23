@@ -33,19 +33,46 @@ namespace nguyentuanvuduy_2123110226.Services
         {
             return await context.Orders
                 .AsNoTracking()
+                .Include(o => o.Customer) // ✅ THÊM Include Customer
                 .Where(o => o.Id == id && o.IsActive)
                 .Select(o => new OrderReadDto(
-                    o.Id, o.OrderCode, o.CustomerId, o.ReceiverName, o.ReceiverPhone, o.ReceiverEmail,
-                    o.Province, o.District, o.Address, o.Note,
-                    o.SubTotal, o.PointsUsed, o.DiscountAmount, o.ShippingFee, o.TotalAmount,
-                    o.PaymentMethod, o.PaymentStatus, o.Status, o.CreatedAt,
+                    o.Id,
+                    o.OrderCode,
+                    o.CustomerId,
+                    // ✅ THÊM: Map thông tin Customer (null nếu khách vãng lai)
+                    o.Customer == null ? null : new OrderCustomerDto(
+                        o.Customer.Id,
+                        o.Customer.FullName,
+                        o.Customer.Email,
+                        o.Customer.Points
+                    ),
+                    o.ReceiverName,
+                    o.ReceiverPhone,
+                    o.ReceiverEmail,
+                    o.Province,
+                    o.District,
+                    o.Address,
+                    o.Note,
+                    o.CancelReason,     // ✅ THÊM
+                    o.SubTotal,
+                    o.PointsUsed,
+                    o.DiscountAmount,
+                    o.ShippingFee,
+                    o.TotalAmount,
+                    o.PaymentMethod,
+                    o.PaymentStatus,
+                    o.Status,
+                    o.CreatedAt,
                     o.OrderDetails.Select(d => new OrderDetailReadDto(
-                        d.ProductId, d.ProductName, d.UnitPrice, d.Quantity, d.SubTotal
+                        d.ProductId,
+                        d.ProductName,
+                        d.UnitPrice,
+                        d.Quantity,
+                        d.SubTotal
                     )).ToList()
                 ))
                 .FirstOrDefaultAsync();
         }
-
         public async Task<OrderTrackDto?> TrackAsync(string orderCode)
         {
             return await context.Orders
